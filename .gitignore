@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.env
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+.codesight/
+.windsurf/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App data
+backend/app/data/uploads/
+backend/app/data/runs/
+
+# Not for github
+not_for_github/
