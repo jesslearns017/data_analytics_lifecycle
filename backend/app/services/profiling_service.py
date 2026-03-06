@@ -23,8 +23,19 @@ def _read_file(content: bytes, filename: str) -> pd.DataFrame:
     lower = filename.lower()
     if lower.endswith(".xlsx") or lower.endswith(".xls"):
         return pd.read_excel(io.BytesIO(content), engine="openpyxl")
-    # Default to CSV
-    return pd.read_csv(io.BytesIO(content))
+    # CSV: try UTF-8 first, fall back to Latin-1; auto-detect delimiter; skip comment lines
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return pd.read_csv(
+                io.BytesIO(content),
+                encoding=encoding,
+                sep=None,          # auto-detect delimiter (comma, tab, semicolon, etc.)
+                engine="python",   # required for sep=None
+                comment="#",       # skip lines starting with #
+            )
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("Unable to read file — unsupported encoding.")
 
 
 def _detect_datetime_candidates(df: pd.DataFrame) -> list[str]:

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 
 from app.core.config import settings
+from app.core.task_manager import submit_task
 from app.schemas.modeling import ModelTrainRequest, ModelTrainResponse
 from app.services.modeling_service import train_model
 
@@ -9,12 +10,18 @@ import json
 router = APIRouter(tags=["modeling"])
 
 
-@router.post("/models/train", response_model=ModelTrainResponse)
+def _run_training(content: bytes, filename: str, req: ModelTrainRequest) -> dict:
+    """Wrapper that runs training and returns a serializable dict."""
+    result = train_model(content, filename, req)
+    return result.model_dump()
+
+
+@router.post("/models/train")
 async def train(
     file: UploadFile = File(...),
     config_json: str = Form(...),
 ):
-    """Train a model on the uploaded (cleaned) CSV."""
+    """Submit a model training task. Returns a task_id to poll for results."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
 
@@ -29,11 +36,5 @@ async def train(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid config JSON: {str(e)}")
 
-    try:
-        result = train_model(content, file.filename, req)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
-
-    return result
+    task_id = submit_task(_run_training, content, file.filename, req)
+    return {"task_id": task_id}

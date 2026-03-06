@@ -1,11 +1,15 @@
+import base64
+import io
+import json
+
+import pandas as pd
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 
 from app.core.config import settings
+from app.core.task_manager import submit_task
 from app.schemas.etl import ETLApplyResponse, ETLPlan, ETLPlanRequest
 from app.services.etl_service import apply_plan, compute_health_score, recommend_plan
 from app.services.profiling_service import _read_file
-
-import json
 
 router = APIRouter(tags=["etl"])
 
@@ -24,12 +28,39 @@ async def generate_plan(req: ETLPlanRequest):
     return plan
 
 
+def _run_etl(content: bytes, filename: str, plan: ETLPlan) -> dict:
+    """Wrapper that runs ETL apply + health scores and returns a serializable dict."""
+    # Health score BEFORE cleaning
+    try:
+        df_before = _read_file(content, filename)
+        health_before = compute_health_score(df_before)
+    except Exception:
+        health_before = {"total": None, "insufficient_data": True}
+
+    # Apply the plan
+    result = apply_plan(content, filename, plan)
+
+    # Health score AFTER cleaning
+    try:
+        cleaned_bytes = base64.b64decode(result.cleaned_csv_base64)
+        df_after = pd.read_csv(io.BytesIO(cleaned_bytes))
+        health_after = compute_health_score(df_after)
+    except Exception:
+        health_after = {"total": None, "insufficient_data": True}
+
+    return {
+        **result.model_dump(),
+        "health_before": health_before,
+        "health_after": health_after,
+    }
+
+
 @router.post("/etl/apply")
 async def apply_etl(
     file: UploadFile = File(...),
     plan_json: str = Form(...),
 ):
-    """Apply an ETL plan to a file. Returns cleaned CSV + treatment log + health scores."""
+    """Submit an ETL apply task. Returns a task_id to poll for results."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
 
@@ -44,30 +75,5 @@ async def apply_etl(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid plan JSON: {str(e)}")
 
-    # Compute health score BEFORE cleaning
-    try:
-        df_before = _read_file(content, file.filename)
-        health_before = compute_health_score(df_before)
-    except Exception:
-        health_before = {"total": None, "insufficient_data": True}
-
-    # Apply the plan
-    try:
-        result = apply_plan(content, file.filename, plan)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"ETL failed: {str(e)}")
-
-    # Compute health score AFTER cleaning
-    import base64, io, pandas as pd
-    try:
-        cleaned_bytes = base64.b64decode(result.cleaned_csv_base64)
-        df_after = pd.read_csv(io.BytesIO(cleaned_bytes))
-        health_after = compute_health_score(df_after)
-    except Exception:
-        health_after = {"total": None, "insufficient_data": True}
-
-    return {
-        **result.model_dump(),
-        "health_before": health_before,
-        "health_after": health_after,
-    }
+    task_id = submit_task(_run_etl, content, file.filename, plan)
+    return {"task_id": task_id}

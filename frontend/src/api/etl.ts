@@ -1,4 +1,4 @@
-import api from "./client";
+import api, { pollTask } from "./client";
 import type { ETLPlanData, ETLApplyResult, ProfileResponse } from "../types";
 
 export async function fetchETLPlan(
@@ -23,8 +23,11 @@ export async function applyETLPlan(
   formData.append("file", file, filename);
   formData.append("plan_json", JSON.stringify(plan));
 
-  const response = await api.post<ETLApplyResult>("/etl/apply", formData, {
+  // Submit task — returns immediately with task_id
+  const response = await api.post("/etl/apply", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return response.data;
+  const { task_id } = response.data;
+  // Poll until complete
+  return await pollTask<ETLApplyResult>(task_id);
 }

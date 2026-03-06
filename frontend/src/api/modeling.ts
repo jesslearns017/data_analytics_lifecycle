@@ -1,4 +1,4 @@
-import api from "./client";
+import api, { pollTask } from "./client";
 
 export interface ModelTrainConfig {
   target: string;
@@ -10,6 +10,7 @@ export interface ModelTrainConfig {
     class_weight?: string | null;
     cv_folds?: number;
     use_smote?: boolean;
+    sample_size?: number | null;
     n_estimators?: number | null;
     max_depth?: number | null;
     learning_rate?: number | null;
@@ -42,12 +43,14 @@ export async function trainModel(
   formData.append("config_json", JSON.stringify(config));
 
   try {
+    // Submit task — returns immediately with task_id
     const response = await api.post("/models/train", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-    return response.data;
+    const { task_id } = response.data;
+    // Poll until complete
+    return await pollTask(task_id);
   } catch (err: any) {
-    // Extract backend error detail from 400/422 responses
     const detail = err?.response?.data?.detail;
     if (detail) {
       throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));

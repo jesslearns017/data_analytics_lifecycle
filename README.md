@@ -23,6 +23,8 @@ An interactive web application that guides you through the **6-step Data Analyti
 - **Smart ETL** — Per-column treatment recommendations with explanations, one-click apply, Health Score (0–100) before/after
 - **12 ML Models** — Linear, Polynomial, Decision Tree, Random Forest, Gradient Boosting, Logistic, Naive Bayes, KNN, SVM (regression + classification)
 - **Advanced Options** — k-fold cross-validation, auto feature engineering, SMOTE for class imbalance, row sampling for large datasets
+- **Background Threading** — Long-running tasks (model training, ETL apply) run in background threads with polling, preventing HTTP timeouts
+- **Memory Protection** — One-hot encoding capped at 50 categories per column, pre-training memory guard (4 GB limit), actionable error messages
 - **Feature Selection** — Manual, forward, backward, and lasso methods
 - **Per-Model Visuals** — Confusion matrix, ROC curve, predicted vs actual, residuals, feature importance, coefficients table
 - **Model Comparison** — Side-by-side metrics table with auto-generated insights
@@ -69,6 +71,7 @@ data-analytics/
 │   └── app/
 │       ├── main.py                  # FastAPI entry point
 │       ├── core/config.py           # App settings
+│       ├── core/task_manager.py     # Background thread task system
 │       ├── api/v1/routes/           # REST endpoints
 │       │   ├── profiling.py         # POST /api/v1/profile
 │       │   ├── etl.py              # POST /api/v1/etl/plan, /etl/apply
@@ -95,6 +98,7 @@ data-analytics/
 - **Backend** is stateless — no database, no file storage on server. It receives data, computes results, and returns them.
 - **Frontend** uses IndexedDB for ephemeral storage (datasets, profiles, cleaning plans, model runs).
 - **API Pattern**: Frontend sends file + config with each request → backend returns results.
+- **Async Tasks**: Long operations (training, ETL) return a `task_id` immediately; frontend polls `GET /api/v1/tasks/{id}` every 2s until complete.
 - **Deployment**: Render (recommended for full-stack) or Netlify (frontend) + Render (backend).
 
 ## Sample Dataset

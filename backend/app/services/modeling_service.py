@@ -502,9 +502,12 @@ def train_model(content: bytes, filename: str, req: ModelTrainRequest) -> ModelT
             X_train_sel, y_train = sm.fit_resample(X_train_sel, y_train)
             smote_applied = True
         except ImportError:
-            pass  # imblearn not installed — skip silently
-        except Exception:
-            pass  # SMOTE can fail on very small datasets
+            raise ValueError(
+                "SMOTE requires the 'imbalanced-learn' package. "
+                "Install it with: pip install imbalanced-learn"
+            )
+        except Exception as e:
+            raise ValueError(f"SMOTE failed: {str(e)}. Try disabling SMOTE or increasing your dataset size.")
 
     # --- Cross-validation (on training data, before final fit) ---
     cv_results = _run_cross_validation(
